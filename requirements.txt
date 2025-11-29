@@ -4,3 +4,6 @@ plotly
 openpyxl
 numpy
 scipy
+datetime
+fpdf
+kaleido
