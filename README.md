@@ -9,6 +9,7 @@
 -   [Reza Rasendriya Adi Putra - 123230030]
 -   [Valentino Abinata - 123230013]
 -   [Rheza Priya Anargya - 123230032]
+-   [Gusti Rama - 123230040]
 
 **Peta Struktur Interaktif & Pemodelan Kontak Fluida**
 
@@ -22,6 +23,10 @@ Website ini adalah aplikasi berbasis Streamlit yang dirancang untuk visualisasi 
 -   **Pemodelan Permukaan 3D**: Jelajahi reservoir dalam 3D dengan permukaan medan dan bidang GOC/WOC yang dapat disesuaikan.
 -   **Kontrol Kontak Fluida**: Sesuaikan level Gas-Oil Contact (GOC) dan Water-Oil Contact (WOC) secara dinamis.
 -   **Manajemen Data**: Reset data atau muat dataset demo untuk pengujian cepat.
+-   **Ekspor Laporan & Data**:
+    -   **Laporan PDF**: Unduh laporan profesional berisi statistik, perhitungan volumetrik, dan snapshot grafik 2D/3D.
+    -   **Grid Data**: Unduh hasil interpolasi (X, Y, Z) dalam format `.csv` untuk analisis lanjut di software lain (seperti Petrel/QGIS).
+    -   **Ringkasan Teks**: Unduh ringkasan parameter utama dalam format `.txt`.
 
 ## Instalasi
 
@@ -60,3 +65,5 @@ Website ini adalah aplikasi berbasis Streamlit yang dirancang untuk visualisasi 
 -   [Plotly](https://plotly.com/python/)
 -   [NumPy](https://numpy.org/)
 -   [SciPy](https://scipy.org/)
+-   [FPDF](https://pyfpdf.readthedocs.io/)
+-   [Kaleido](https://pypi.org/project/kaleido/)

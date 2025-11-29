@@ -3,6 +3,9 @@ import pandas as pd
 import plotly.graph_objects as go
 import numpy as np
 from scipy.interpolate import griddata
+from datetime import datetime
+from fpdf import FPDF
+import tempfile
 
 # --- KONFIGURASI HALAMAN ---
 st.set_page_config(page_title="GeoViz Pro", layout="wide", page_icon="🌍")
@@ -259,3 +262,176 @@ else:
     else:
         st.warning("⚠️ Data belum cukup untuk membuat kontur. Masukkan minimal 4 titik yang menyebar.")
         st.dataframe(df, use_container_width=True)
+
+    # 2prepare grafik (biar bisa export)    
+    # 1. Figure 2D
+    fig_2d = go.Figure()
+    fig_2d.add_trace(go.Contour(
+        z=grid_z, x=np.linspace(df['X'].min(), df['X'].max(), 100),
+        y=np.linspace(df['Y'].min(), df['Y'].max(), 100),
+        colorscale='Greys', opacity=0.4,
+        contours=dict(start=min_z, end=max_z, size=(max_z - min_z)/10, showlabels=True),
+        name='Structure'
+    ))
+        
+    # Logic Pewarnaan Titik
+    conditions = [
+        (df['Z'] < goc_input),
+        (df['Z'] >= goc_input) & (df['Z'] <= woc_input),
+        (df['Z'] > woc_input)
+    ]
+    choices = ['Gas Cap', 'Oil Zone', 'Aquifer']
+    colors_map = {'Gas Cap': 'red', 'Oil Zone': 'green', 'Aquifer': 'blue'}
+    df['Fluid'] = np.select(conditions, choices, default='Unknown')
+
+    for fluid in choices:
+        subset = df[df['Fluid'] == fluid]
+        if not subset.empty:
+            fig_2d.add_trace(go.Scatter(
+                x=subset['X'], y=subset['Y'],
+                mode='markers+text', text=subset['Z'].astype(int), textposition="top center",
+                marker=dict(size=12, color=colors_map[fluid], line=dict(width=1, color='black')),
+                name=fluid
+            ))
+    fig_2d.update_layout(height=600, margin=dict(l=20, r=20, t=40, b=20),
+                        xaxis_title="X Coordinate", yaxis_title="Y Coordinate")
+    # 2. Figure 3D
+    fig_3d = go.Figure()
+    fig_3d.add_trace(go.Surface(z=grid_z, x=grid_x, y=grid_y, colorscale='Greys', opacity=0.8, name='Structure'))
+    
+    def create_plane(z_lvl, color, name):
+        return go.Surface(
+            z=z_lvl * np.ones_like(grid_z), x=grid_x, y=grid_y,
+            colorscale=[[0, color], [1, color]], opacity=0.4, showscale=False, name=name
+        )
+    fig_3d.add_trace(create_plane(goc_input, 'red', 'GOC'))
+    fig_3d.add_trace(create_plane(woc_input, 'blue', 'WOC'))
+    fig_3d.add_trace(go.Scatter3d(x=df['X'], y=df['Y'], z=df['Z'], mode='markers',
+                                marker=dict(size=4, color='black'), name='Wells'))
+    fig_3d.update_layout(scene=dict(xaxis_title='X', yaxis_title='Y', zaxis_title='Depth', zaxis=dict(autorange="reversed")),
+                        height=600, margin=dict(l=0, r=0, b=0, t=0))
+    # --- E. BAGIAN EKSPOR (DOWNLOAD) ---
+    st.markdown("---")
+    st.subheader("📂 Ekspor Laporan & Data")
+    
+    # Persiapan Data untuk 3 Tombol
+    
+    # 1. Data CSV Grid
+    grid_df = pd.DataFrame({'X': grid_x.flatten(), 'Y': grid_y.flatten(), 'Z': grid_z.flatten()}).dropna()
+    csv_data = grid_df.to_csv(index=False).encode('utf-8')
+    
+    # 2. Data TXT Report
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    txt_data = f"""
+==================================================
+GEOVIZ PRO - LAPORAN SIMULASI RESERVOIR
+==================================================
+Tanggal Dibuat : {timestamp}
+Proyek         : Visualisasi Reservoir 3D
+--------------------------------------------------
+1. STATISTIK INPUT
+--------------------------------------------------
+Total Titik        : {len(df)}
+Rentang Koordinat  : X ({df['X'].min()} - {df['X'].max()})
+                     Y ({df['Y'].min()} - {df['Y'].max()})
+Rentang Kedalaman  : {df['Z'].min()} m - {df['Z'].max()} m
+--------------------------------------------------
+2. MODEL KONTAK FLUIDA
+--------------------------------------------------
+Kontak Gas-Minyak (GOC) : {goc_input} m
+Kontak Air-Minyak (WOC) : {woc_input} m
+--------------------------------------------------
+3. ESTIMASI VOLUMETRIK (GROSS ROCK VOLUME)
+--------------------------------------------------
+(*) Vol. Gas Cap              : {vol_gas_cap/1e6:.4f} Juta m³
+(*) Vol. Oil Zone             : {vol_oil_zone/1e6:.4f} Juta m³
+(*) Total Reservoir           : {vol_total_res/1e6:.4f} Juta m³
+--------------------------------------------------
+Catatan:
+Angka volume di atas adalah estimasi Gross Rock Volume
+(GRV) berdasarkan metode interpolasi saat ini.
+==================================================
+        """.strip()
+        
+    # 3. Fungsi PDF (dengan Gambar)
+    def create_pdf(df, goc, woc, v_gas, v_oil, v_total, fig2d, fig3d):
+        pdf = FPDF()
+        pdf.set_auto_page_break(auto=True, margin=15)
+        
+        # --- HALAMAN 1: TEXT SUMMARY ---
+        pdf.add_page()
+        
+        # Header
+        pdf.set_font("Arial", 'B', 16)
+        pdf.cell(0, 10, "GEOVIZ PRO - LAPORAN LENGKAP", ln=True, align='C')
+        pdf.set_font("Arial", size=10)
+        pdf.cell(0, 10, f"Tanggal: {datetime.now().strftime('%d-%m-%Y %H:%M')}", ln=True, align='C')
+        pdf.line(10, 30, 200, 30)
+        pdf.ln(10)
+        
+        # Bagian 1: Statistik Input (Ditambahkan)
+        pdf.set_font("Arial", 'B', 12)
+        pdf.cell(0, 10, "1. STATISTIK INPUT", ln=True)
+        pdf.set_font("Arial", size=11)
+        pdf.cell(0, 8, f"Total Titik Data: {len(df)}", ln=True)
+        pdf.cell(0, 8, f"Rentang X: {df['X'].min()} - {df['X'].max()}", ln=True)
+        pdf.cell(0, 8, f"Rentang Y: {df['Y'].min()} - {df['Y'].max()}", ln=True)
+        pdf.cell(0, 8, f"Rentang Kedalaman (Z): {df['Z'].min()} m - {df['Z'].max()} m", ln=True)
+        pdf.ln(5)
+        # Bagian 2: Kontak Fluida (Ditambahkan)
+        pdf.set_font("Arial", 'B', 12)
+        pdf.cell(0, 10, "2. MODEL KONTAK FLUIDA", ln=True)
+        pdf.set_font("Arial", size=11)
+        pdf.cell(0, 8, f"Gas-Oil Contact (GOC): {goc} m", ln=True)
+        pdf.cell(0, 8, f"Water-Oil Contact (WOC): {woc} m", ln=True)
+        pdf.ln(5)
+        
+        # Bagian 3: Volumetrik
+        pdf.set_font("Arial", 'B', 12)
+        pdf.cell(0, 10, "3. ESTIMASI VOLUMETRIK (GRV)", ln=True)
+        pdf.set_font("Arial", size=11)
+        pdf.cell(0, 8, f"Volume Gas Cap: {v_gas/1e6:.4f} Juta m3", ln=True)
+        pdf.cell(0, 8, f"Volume Oil Zone: {v_oil/1e6:.4f} Juta m3", ln=True)
+        pdf.cell(0, 8, f"Total Reservoir: {v_total/1e6:.4f} Juta m3", ln=True)
+        pdf.ln(5)
+        # Catatan
+        pdf.set_font("Arial", 'I', 10)
+        pdf.multi_cell(0, 6, "Catatan: Angka volume di atas adalah estimasi Gross Rock Volume (GRV) berdasarkan metode interpolasi saat ini.")
+        
+        # --- HALAMAN 2: SNAPSHOT 2D ---
+        pdf.add_page()
+        pdf.set_font("Arial", 'B', 14)
+        pdf.cell(0, 10, "LAMPIRAN A: PETA KONTUR 2D", ln=True, align='C')
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+            fig2d.update_layout(plot_bgcolor='white', paper_bgcolor='white')
+            fig2d.write_image(tmp.name, width=800, height=600, engine="kaleido")
+            pdf.image(tmp.name, x=15, y=40, w=180)
+        
+        # --- HALAMAN 3: SNAPSHOT 3D ---
+        pdf.add_page()
+        pdf.cell(0, 10, "LAMPIRAN B: MODEL 3D", ln=True, align='C')
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+            fig3d.update_layout(scene=dict(bgcolor='white'), paper_bgcolor='white')
+            fig3d.write_image(tmp.name, width=800, height=600, engine="kaleido")
+            pdf.image(tmp.name, x=15, y=40, w=180)
+        
+        return pdf.output(dest='S').encode('latin-1')
+    
+    # --- LAYOUT 3 KOLOM TOMBOL ---
+    col_csv, col_txt, col_pdf = st.columns(3)
+    
+    with col_csv:
+        st.download_button("💾 Download Grid (.csv)", data=csv_data, file_name="grid_data.csv", mime="text/csv")
+        
+    with col_txt:
+        st.download_button("📄 Download Ringkasan (.txt)", data=txt_data, file_name="report.txt", mime="text/plain")
+        
+    with col_pdf:
+        # Tombol Generate PDF (agar tidak berat saat loading awal)
+        if st.button("📊 Generate PDF"):
+            with st.spinner("Membuat PDF..."):
+                try:
+                    pdf_bytes = create_pdf(df, goc_input, woc_input, vol_gas_cap, vol_oil_zone, vol_total_res, fig_2d, fig_3d)
+                    st.download_button("📥 Klik untuk Download PDF", data=pdf_bytes, file_name="laporan_lengkap.pdf", mime="application/pdf", type="primary")
+                except Exception as e:
+                    st.error(f"Gagal: {e}")
