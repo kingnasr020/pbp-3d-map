@@ -281,9 +281,32 @@ with st.sidebar:
                 {'X': 150, 'Y': 250, 'Z': 1100}, {'X': 250, 'Y': 150, 'Z': 1100}
             ]
             st.rerun()
+            
+        # --- Hapus titik terakhir ---
+        if st.button("➖ Hapus Titik Terakhir"):
+            if len(st.session_state['data_points']) > 0:
+                removed = st.session_state['data_points'].pop()
+                st.toast(f"Titik terakhir {removed} dihapus.", icon="🗑️")
+                st.rerun()
+            else:
+                st.warning("Tidak ada titik untuk dihapus.")
     
     # --- EXPORT & SESSION MANAGEMENT ---
     with st.expander("💾 Export & Session", expanded=False):
+        st.markdown("### 📤 Export CSV")
+
+        if not df.empty:
+            csv_data = df.to_csv(index=False).encode('utf-8')
+
+            st.download_button(
+                label="⬇️ Download CSV Data",
+                data=csv_data,
+                file_name=f"reservoir_points_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv"
+            )
+        else:
+            st.info("Belum ada data untuk diexport.")
+
         st.markdown("### 📤 Session Management")
         col_save1, col_save2 = st.columns(2)
         

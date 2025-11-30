@@ -13,6 +13,7 @@
 -   [Bintoro - 123230059]
 -   [Imam Khusain - 123230018]
 -   [Adi Setya N.P - 123230026]
+-   [Bintang Jati Kesuma S - 123230075]
 
 **Peta Struktur Interaktif & Pemodelan Kontak Fluida**
 
